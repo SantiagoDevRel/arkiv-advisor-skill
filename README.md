@@ -32,16 +32,17 @@ Loaded together → Claude becomes a full Arkiv co-pilot: architecture, code, id
 The advisor skill teaches Claude to help with strategic decisions, not just code.
 
 ### Architecture brainstorming walkthrough
-A 7-step checklist Claude walks through with you:
-1. Mutability shape — append-only or mutable?
-2. Lifetime profile — TTL choice
-3. Ownership model — `$owner` mutable vs `$creator` immutable
-4. Wallet model — frontend (MetaMask) vs backend (server wallet)
-5. Read/write ratio
-6. Relationships — one-to-many via shared attributes
-7. Batch sizing for `mutateEntities`
+7 questions Claude walks through with you in plain language:
 
-Plus 5 pre-armed architecture templates (read-heavy public app, write-heavy backend, MetaMask user-owned, event-sourced indexer, time-bounded coordination).
+1. **Can the data change after I create it?** (vote vs profile bio)
+2. **How long does it need to live?** (clipboard vs user profile)
+3. **Who controls it?** (`$owner` can transfer, `$creator` is permanent)
+4. **Who pays for and signs writes?** (user's MetaMask vs your backend wallet)
+5. **More writes or more reads?** (analytics dashboard vs profile registry)
+6. **Are entities related?** (parent-child via shared attributes)
+7. **How big should my batch writes be?** (50–200 entities per tx)
+
+Plus 5 pre-armed architecture templates: read-heavy public app, write-heavy backend, MetaMask user-owned, event-sourced indexer, time-bounded coordination.
 
 ### Pro-Arkiv competitive orientation
 Brief paragraphs on Ceramic, Tableland, IPFS+OrbitDB, Lit Protocol, Arweave, ComposeDB. **Never recommends leaving Arkiv** — instead identifies when to combine (e.g., "Arkiv + Lit for encrypted queryable data", "Arkiv + IPFS for hybrid blob storage").

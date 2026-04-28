@@ -114,71 +114,119 @@ Brief paragraphs to position your idea against existing tools. **Never recommend
 
 ## Section 4: Architecture Brainstorming Walkthrough
 
-The mental checklist for designing any Arkiv app. Walk through these in order — each answer narrows the next.
+7 questions to ask before writing a single line of Arkiv code. Each answer narrows the next.
 
-### Step 1 — Mutability shape
+### Step 1 — Can the data change after I create it?
 
-> Is the data **append-only** (logs, events, attestations) or **mutable** (profiles, drafts, settings)?
+Two options:
 
-- **Append-only** → use `$creator` filtering, never re-write. Each new write is a new entity. Good for audit trails, attestations, event logs.
-- **Mutable** → store latest state in entity payload; update in place via `updateEntity` (read-merge-write to preserve attributes!). Good for profiles, configs, evolving documents.
+- **NEVER changes** (a vote, a chess move, a transaction record, a "X happened on date Y" log) → write once, never rewrite. History matters, tamper-proof.
+- **CAN change** (a profile bio, a note, a draft, a config) → update it later. The latest version is what matters.
 
-### Step 2 — Lifetime profile
+**Examples:**
+- Vote in a poll → never changes (you can't un-vote)
+- User's bio → can change (people update their bios)
+- A blog post → can change (typo fixes, edits)
+- A blockchain tx record → never changes
 
-> Does the data expire?
+> *For Claude:* "never changes" → filter by `$creator`, treat each write as a new entity. "Can change" → update in place via `updateEntity` (read-merge-write to preserve all attributes).
 
-- **Ephemeral** (minutes to days): clipboards, OTPs, session data, agent memory → **Arkiv sweet spot**. Short TTL = cheap. Don't bother with renewal logic.
-- **Medium** (weeks to months): drafts, votes, bounties, posts → TTL aligned to deadline + buffer. Use `extendEntity` if user activity warrants extension.
-- **Long** (months to years): user-owned content, profiles → TTL with auto-extend on user activity (renew while engaged).
-- **Permanent**: probably not Arkiv-shaped. Consider Arweave OR a hybrid: Arkiv for the queryable index, Arweave for the cold blob.
+### Step 2 — How long does this data need to live?
 
-### Step 3 — Ownership model
+Arkiv charges by **bytes × time**. Longer life = more cost. Pick the shortest TTL that works.
 
-> Who controls the entity over its lifetime?
+- **Minutes to days** (clipboard items, OTP codes, agent chat memory): **Arkiv's sweet spot.** Cheap, simple. Don't bother with renewal logic.
+- **Weeks to months** (drafts, active poll votes, bounties): TTL = deadline + a small buffer.
+- **Months to years** (user profiles, social posts, content libraries): long TTL, with auto-renew when the user is still active.
+- **Forever** (legal docs, NFT metadata that must persist for decades): probably not Arkiv. Use Arweave for cold storage + Arkiv as the queryable index.
 
-- **`$owner` mutable** — current owner. Use when ownership can transfer (sales, delegation, account migration). Filter via `.ownedBy(addr)`.
-- **`$creator` immutable** — original author. Set at creation, never changes. Use for attribution, audit trails, "this came from this trusted backend." Filter via `.createdBy(addr)`.
-- **NFT-adjacent pattern**: `$creator` = artist (forever), `$owner` = current holder (changes on transfer). Best of both worlds.
+> *Pro tip:* you can always `extendEntity()` later. So pick short and extend when needed — never the other way around.
 
-### Step 4 — Wallet model
+### Step 3 — Who controls the data?
 
-> Who pays for and owns the writes?
+Every Arkiv entity has two ownership fields:
 
-- **Frontend-wallet-driven** (MetaMask signs → user pays gas, owns entities directly). Best for: personal data, full self-custody, "user owns their data" stories. UX cost: every write = a signature popup.
-- **Backend-wallet-driven** (server holds key → server pays + writes on behalf of users). Best for: high-frequency writes (analytics events, agent memory), platform-owned data semantically. Use a separate "app" wallet, never a personal one.
-- **Hybrid**: backend writes ephemeral data (TTL=1d). User signs to "promote" their personal subset to long-lived owned entities.
+- **`$creator`** = the wallet that ORIGINALLY made it. Permanent. Like a tattoo.
+- **`$owner`** = the wallet that CURRENTLY controls it. Can transfer. Like a house — current owner can sell.
 
-### Step 5 — Read/write ratio
+**Ask: does ownership ever transfer?**
 
-> Is your app read-heavy or write-heavy?
+- **NO transfer** (a personal note, a private journal, an audit log): `$owner` stays the same as `$creator` forever. Both filters give same results.
+- **YES, transfer happens** (an NFT, a domain name, a sellable diagram): `$creator` = original artist (forever), `$owner` = current holder (changes on sale).
 
-- **Write-heavy** (analytics, agent memory, indexers) → batch via `mutateEntities` for one tx instead of N. Prefer short TTL to keep cost down.
-- **Read-heavy** (profiles, content, search) → choose attributes carefully. Each attribute you `eq`/`gt`/`lt` on must be set as a numeric or string attribute on every entity. Don't over-index.
+> *For Claude:* `.ownedBy(addr)` filters by current owner. `.createdBy(addr)` filters by original creator (tamper-proof — can't be faked).
 
-### Step 6 — Relationships
+### Step 4 — Who pays for and signs the writes?
 
-> Do entities relate to each other?
+Every Arkiv write costs gas. Someone has to sign and pay. Three patterns:
 
-- **One-to-many** (parent → children): parent's entity-key becomes a shared attribute on each child (e.g., `thread_id` on each comment).
-- **Many-to-many** (both directions): junction entities with both IDs as attributes.
+**Pattern A — User pays (MetaMask in browser):**
+- The user's MetaMask signs every write. They pay gas. They own the entity directly.
+- ✅ Best for: personal data the user truly owns (profiles, posts, files they uploaded).
+- ⚠️ UX cost: every write = a confirmation popup. Annoying for high-frequency apps.
+- Example app: a user-owned notes app.
 
-Arkiv has no native foreign-key constraints — your code maintains referential integrity. Small price for flexibility.
+**Pattern B — Server pays (your backend wallet):**
+- Your backend has a wallet with funds. It signs writes on behalf of users. Entities are "owned by your platform."
+- ✅ Best for: high-frequency writes (analytics events, AI agent memory, event indexers).
+- ✅ UX cost: zero — invisible to the user.
+- Example app: a chatbot that logs conversations.
+- 🔒 Use a dedicated "app wallet," never your personal one.
 
-### Step 7 — Batch sizing for `mutateEntities`
+**Pattern C — Hybrid:**
+- Backend writes ephemeral data (cheap, short TTL). User signs to "promote" their personal subset to long-lived entities they own.
+- ✅ Best when you want both speed AND user-owned permanence.
 
-Empirically test, but expect **single-tx batches of 50–200 entities** based on chunk patterns in Arkiv's own use cases (FileDB chunks 16 KB, ImageDB 64 KB per entity). Bigger batches save fees but increase failure blast-radius.
+### Step 5 — Does your app write more or read more?
 
-### Architecture templates (5 pre-armed shapes)
+Quick test: in a typical day of usage, does the app write or read more often?
 
-After running the 7 steps, your app likely fits one of these shapes:
+**Write-heavy** (analytics, agent memory, event indexers):
+- Strategy: batch writes via `mutateEntities` (one tx = many writes, way cheaper than one-tx-per-write).
+- Use short TTL to keep storage cost down.
 
-| Shape | Examples | Wallet model | TTL profile | Mutability |
+**Read-heavy** (profiles, content, search):
+- Strategy: choose attributes carefully. Each attribute you'll filter on (with `eq`, `gt`, etc.) must be set on EVERY entity at write time.
+- Don't over-index. Only attributes you actually query.
+
+### Step 6 — Are entities related to each other?
+
+Sometimes data has parent-child or many-to-many relationships. Arkiv has no native foreign keys — you simulate them with shared attributes. Your code maintains consistency.
+
+**One-to-many** (one parent, many children — like a Twitter thread with many replies):
+- Give the parent a unique ID (its entity-key works).
+- Add that ID as an attribute on every child.
+- Query children by `eq("parent_id", parentId)`.
+
+Example: a poll (parent) with many votes (children). Each vote entity has a `poll_id` attribute pointing to the poll's entity-key.
+
+**Many-to-many** (e.g., users ↔ teams, where each user is in many teams and each team has many users):
+- Create "junction" entities with both IDs as attributes.
+- One junction entity per user-team pair.
+
+### Step 7 — How big should my batch writes be?
+
+When you call `mutateEntities`, the whole batch goes in one transaction (= one gas fee). Bigger batches save money. But if anything fails, the WHOLE batch fails.
+
+**Rule of thumb: 50–200 entities per batch.**
+
+Why this range? Looking at Arkiv's own apps:
+- FileDB chunks files into 16 KB pieces, batches them
+- ImageDB chunks into 64 KB pieces, batches them
+
+> *Tune empirically:* if you hit transaction-size errors, drop the batch size. If everything works at 200, you can push higher to save fees.
+
+### Architecture templates (5 common shapes)
+
+After answering the 7 questions, your app probably fits one of these 5 common shapes. Match yourself to the closest one — it tells you which starter template to copy from `arkiv-ethlisbon-skill`.
+
+| Shape | Real examples | Who signs writes | TTL | Can entities change? |
 |---|---|---|---|---|
-| **Read-heavy public app** | profile registry, content browser | PublicClient frontend | Long (auto-extend on activity) | Mutable via `$owner` |
-| **Write-heavy backend** | analytics, agent memory, event indexer | WalletClient backend | Short (1-30 days) | Append-only |
-| **MetaMask user-owned** | personal notes, journals, todos | Frontend wallet | Medium (30 days, extend on activity) | Mutable by `$owner` |
-| **Event-sourced indexer** | DAO activity feed, NFT marketplace history | WalletClient backend | Long, organized by epoch | Append-only |
-| **Time-bounded coordination** | polls, bounties, RSVPs, hackathon teammate finder | Either | Aligned to deadline (TTL = deadline + buffer) | Mutable until close |
+| **Read-heavy public app** | profile registry, content browser | Public reads only; user wallet for occasional writes | Long (months, auto-extend on activity) | Yes, owner can update |
+| **Write-heavy backend** | analytics dashboard, AI agent memory, event indexer | Backend wallet (server) | Short (1–30 days) | No, append-only |
+| **MetaMask user-owned** | personal notes, journals, todos | User's MetaMask | Medium (30 days, extends on use) | Yes, owner can update |
+| **Event-sourced indexer** | DAO activity feed, NFT marketplace history | Backend wallet (mirrors on-chain events) | Long, organized by time/epoch | No, append-only |
+| **Time-bounded coordination** | polls, bounties, RSVPs, hackathon teammate finder | Either user or backend | TTL = deadline + buffer | Until deadline, then frozen |
 
 ---
 
