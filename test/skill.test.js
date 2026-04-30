@@ -137,7 +137,7 @@ test("CLI real install (minimal) copies SKILL.md byte-for-byte", () => {
       `node "${CLI_PATH}" init --minimal --project`,
       { encoding: "utf8", cwd: tmp }
     );
-    const installed = path.join(tmp, ".claude", "skills", "arkiv-advisor.md");
+    const installed = path.join(tmp, ".claude", "skills", "arkiv-advisor", "SKILL.md");
     assert.ok(fs.existsSync(installed), "installed file missing");
     const installedContent = fs.readFileSync(installed, "utf8");
     assert.equal(installedContent, skillContent, "installed skill does not match source");

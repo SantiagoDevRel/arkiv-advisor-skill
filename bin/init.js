@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SKILL_SRC = path.join(__dirname, "..", "SKILL.md");
-const SKILL_DEST_NAME = "arkiv-advisor.md";
+const SKILL_FOLDER_NAME = "arkiv-advisor";
 const PKG_NAME = "@santiagodevrel/arkiv-advisor-skill";
 const ETHLISBON_PKG = "@santiagodevrel/arkiv-ethlisbon-skill";
 
@@ -72,7 +72,9 @@ function copyAdvisorSkill(scope, dryRun) {
   const baseDir = scope === "project"
     ? path.join(process.cwd(), ".claude", "skills")
     : path.join(os.homedir(), ".claude", "skills");
-  const dest = path.join(baseDir, SKILL_DEST_NAME);
+  // Claude Code expects subfolder format: ~/.claude/skills/<name>/SKILL.md
+  const skillDir = path.join(baseDir, SKILL_FOLDER_NAME);
+  const dest = path.join(skillDir, "SKILL.md");
   if (dryRun) {
     ok(`(dry-run) would: copy SKILL.md → ${dest}`);
     return dest;
@@ -80,7 +82,7 @@ function copyAdvisorSkill(scope, dryRun) {
   if (!fs.existsSync(SKILL_SRC)) {
     throw new Error(`Source SKILL.md not found at ${SKILL_SRC}`);
   }
-  fs.mkdirSync(baseDir, { recursive: true });
+  fs.mkdirSync(skillDir, { recursive: true });
   fs.copyFileSync(SKILL_SRC, dest);
   return dest;
 }
