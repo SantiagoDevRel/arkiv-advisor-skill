@@ -1,6 +1,6 @@
 {
   "name": "@santiagodevrel/arkiv-advisor-skill",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Claude Code skill that helps builders make architecture and ideation decisions on Arkiv. Covers mental model, brainstorming walkthroughs, ETHLisbon sponsor mix patterns, business model patterns, and 30+ idea seeds. Pairs with arkiv-ethlisbon-skill for full HOW + WHAT/WHY coverage.",
   "type": "module",
   "bin": {
